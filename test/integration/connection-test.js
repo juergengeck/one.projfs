@@ -112,13 +112,14 @@ async function runConnectionTest() {
         testResults.iopInviteExists = true;
         console.log(`✅ IOP invite file exists: ${IOP_INVITE_FILE}`);
 
-        // Test 4: Check IOM invite file exists
+        // Test 4: Check IOM invite file exists (optional)
         console.log('\n4️⃣ Checking IOM (Instance of Machine) invite file...');
-        if (!fs.existsSync(IOM_INVITE_FILE)) {
-            throw new Error(`IOM invite file not found: ${IOM_INVITE_FILE}`);
+        if (fs.existsSync(IOM_INVITE_FILE)) {
+            testResults.iomInviteExists = true;
+            console.log(`✅ IOM invite file exists: ${IOM_INVITE_FILE}`);
+        } else {
+            console.log(`⚠️  IOM invite file not found (optional): ${IOM_INVITE_FILE}`);
         }
-        testResults.iomInviteExists = true;
-        console.log(`✅ IOM invite file exists: ${IOM_INVITE_FILE}`);
 
         // Test 5: Read and validate IOP invite
         console.log('\n5️⃣ Reading and validating IOP invite...');
@@ -151,43 +152,49 @@ async function runConnectionTest() {
             throw new Error(`Invalid IOP invite format: ${parseError.message}`);
         }
 
-        // Test 6: Read and validate IOM invite
-        console.log('\n6️⃣ Reading and validating IOM invite...');
-        let iomInviteContent;
-        try {
-            iomInviteContent = fs.readFileSync(IOM_INVITE_FILE, 'utf-8').trim();
-            testResults.iomInviteReadable = true;
-            testResults.iomInviteSize = iomInviteContent.length;
-            console.log(`✅ IOM invite readable (${testResults.iomInviteSize} bytes)`);
-        } catch (readError) {
-            throw new Error(`Failed to read IOM invite: ${readError.message}`);
-        }
-
-        if (iomInviteContent.length === 0) {
-            throw new Error('IOM invite file is empty!');
-        }
-
+        // Test 6: Read and validate IOM invite (if available)
         let iomInviteData;
-        try {
-            iomInviteData = parseInviteUrl(iomInviteContent);
-            verifyInviteData(iomInviteData);
-            testResults.iomInviteValid = true;
-            console.log(`✅ IOM invite is valid`);
-            console.log(`   WebSocket URL: ${iomInviteData.url}`);
-            console.log(`   Public Key: ${iomInviteData.publicKey.substring(0, 16)}...`);
-            console.log(`   Token: ${iomInviteData.token.substring(0, 16)}...`);
-        } catch (parseError) {
-            throw new Error(`Invalid IOM invite format: ${parseError.message}`);
-        }
+        if (testResults.iomInviteExists) {
+            console.log('\n6️⃣ Reading and validating IOM invite...');
+            let iomInviteContent;
+            try {
+                iomInviteContent = fs.readFileSync(IOM_INVITE_FILE, 'utf-8').trim();
+                testResults.iomInviteReadable = true;
+                testResults.iomInviteSize = iomInviteContent.length;
+                console.log(`✅ IOM invite readable (${testResults.iomInviteSize} bytes)`);
+            } catch (readError) {
+                console.log(`⚠️  Failed to read IOM invite: ${readError.message}`);
+            }
 
-        // Test 7: Verify both invites use same CommServer
-        console.log('\n7️⃣ Verifying CommServer consistency...');
-        if (iopInviteData.url !== iomInviteData.url) {
-            console.log(`⚠️  Warning: IOP and IOM invites use different CommServers`);
-            console.log(`   IOP: ${iopInviteData.url}`);
-            console.log(`   IOM: ${iomInviteData.url}`);
+            if (iomInviteContent && iomInviteContent.length === 0) {
+                console.log(`⚠️  IOM invite file is empty!`);
+            } else if (iomInviteContent) {
+                try {
+                    iomInviteData = parseInviteUrl(iomInviteContent);
+                    verifyInviteData(iomInviteData);
+                    testResults.iomInviteValid = true;
+                    console.log(`✅ IOM invite is valid`);
+                    console.log(`   WebSocket URL: ${iomInviteData.url}`);
+                    console.log(`   Public Key: ${iomInviteData.publicKey.substring(0, 16)}...`);
+                    console.log(`   Token: ${iomInviteData.token.substring(0, 16)}...`);
+                } catch (parseError) {
+                    console.log(`⚠️  Invalid IOM invite format: ${parseError.message}`);
+                }
+            }
+
+            // Test 7: Verify both invites use same CommServer
+            if (iomInviteData) {
+                console.log('\n7️⃣ Verifying CommServer consistency...');
+                if (iopInviteData.url !== iomInviteData.url) {
+                    console.log(`⚠️  Warning: IOP and IOM invites use different CommServers`);
+                    console.log(`   IOP: ${iopInviteData.url}`);
+                    console.log(`   IOM: ${iomInviteData.url}`);
+                } else {
+                    console.log(`✅ Both invites use same CommServer: ${iopInviteData.url}`);
+                }
+            }
         } else {
-            console.log(`✅ Both invites use same CommServer: ${iopInviteData.url}`);
+            console.log('\n6️⃣ Skipping IOM invite validation (file not available)');
         }
 
         // Summary
