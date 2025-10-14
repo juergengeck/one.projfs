@@ -1,4 +1,4 @@
-# one.ifsprojfs
+# one.projfs
 
 Native IFileSystem to ProjFS bridge for one.filer - provides high-performance Windows filesystem integration for ONE content.
 
@@ -8,7 +8,7 @@ This N-API module is the core component that enables one.filer to expose ONE dat
 
 **Before**: Windows Explorer → ProjFS → projfs-fuse.one → FUSE emulation → multiple adapters → IFileSystem
 
-**After**: Windows Explorer → ProjFS → one.ifsprojfs → IFileSystem
+**After**: Windows Explorer → ProjFS → one.projfs → IFileSystem
 
 This provides the same user experience (browsing ONE content in Windows Explorer) with 10-100x better performance.
 
@@ -23,7 +23,7 @@ This provides the same user experience (browsing ONE content in Windows Explorer
 ## Installation
 
 ```bash
-npm install @refinio/one.ifsprojfs
+npm install @refinio/one.projfs
 ```
 
 Note: This package requires Windows 10 version 1809 or later with ProjFS enabled.
@@ -45,7 +45,7 @@ This module is used by one.filer to provide the virtual filesystem that users in
 
 ```javascript
 // In one.filer/src/filer/FilerWithProjFS.ts
-import { IFSProjFSProvider } from '@refinio/one.ifsprojfs';
+import { IFSProjFSProvider } from '@refinio/one.projfs';
 import { CombinedFileSystem } from '@refinio/one.models/lib/fileSystems/CombinedFileSystem.js';
 
 export class FilerWithProjFS {
@@ -57,17 +57,17 @@ export class FilerWithProjFS {
             new DebugFileSystem(...),
             new TypesFileSystem(...)
         ];
-        
+
         const rootFS = new CombinedFileSystem(fileSystems);
-        
-        // Use one.ifsprojfs instead of the 7-layer stack
+
+        // Use one.projfs instead of the 7-layer stack
         this.projfsProvider = new IFSProjFSProvider({
             instancePath: this.instanceDirectory,
             virtualRoot: this.config.projfsRoot || 'C:\\OneFiler',
             fileSystem: rootFS,
             cacheTTL: 30
         });
-        
+
         await this.projfsProvider.mount();
         // Users can now access ONE content at C:\OneFiler!
     }
@@ -77,7 +77,7 @@ export class FilerWithProjFS {
 ### TypeScript Integration
 
 ```typescript
-import { mountIFileSystem } from '@refinio/one.ifsprojfs';
+import { mountIFileSystem } from '@refinio/one.projfs';
 import { ChatFileSystem } from '@refinio/one.models/lib/fileSystems/ChatFileSystem.js';
 
 // Create your filesystem
@@ -131,7 +131,7 @@ Windows ProjFS requires immediate synchronous responses, but ONE's APIs are asyn
 
 ```
 OLD:  Explorer → ProjFS → projfs-fuse → FUSE API → Adapter → Adapter → IFileSystem
-NEW:  Explorer → ProjFS → one.ifsprojfs → IFileSystem
+NEW:  Explorer → ProjFS → one.projfs → IFileSystem
 ```
 
 ### Cache Flow Example
@@ -139,8 +139,8 @@ NEW:  Explorer → ProjFS → one.ifsprojfs → IFileSystem
 ```
 1. User opens C:\OneFiler\chats in Explorer
 2. ProjFS calls GetDirectoryEnumeration (sync)
-3. one.ifsprojfs checks cache:
-   - Hit? Return immediately 
+3. one.projfs checks cache:
+   - Hit? Return immediately
    - Miss? Return placeholder, queue async update
 4. Background: Call IFileSystem.readDir("/chats")
 5. Update cache for next access
@@ -162,8 +162,8 @@ Requirements:
 
 The hybrid approach provides excellent performance:
 
-| Operation | Old 7-Layer Stack | one.ifsprojfs | Improvement |
-|-----------|-------------------|---------------|-------------|
+| Operation | Old 7-Layer Stack | one.projfs | Improvement |
+|-----------|-------------------|------------|-------------|
 | BLOB read | 5-20ms | <1ms | 10-20x |
 | Directory list | 10-50ms | 1-5ms | 5-10x |
 | Metadata (cached) | 5-15ms | <0.1ms | 50-150x |
