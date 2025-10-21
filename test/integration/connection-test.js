@@ -72,6 +72,12 @@ async function startCommServer() {
 
 /**
  * Cleanup test environment
+ *
+ * IMPORTANT: This function aggressively cleans up ALL test state to prevent
+ * caching issues. It must be called:
+ * 1. At the START of tests (to clear stale state from previous runs)
+ * 2. At the END of tests (to clean up after current run)
+ * 3. On SIGINT/SIGTERM (to clean up on interruption)
  */
 async function cleanupTestEnvironment() {
     console.log('🧹 Cleaning up test environment...');
@@ -116,14 +122,29 @@ async function cleanupTestEnvironment() {
         serverProcess = null;
     }
 
-    // Remove test storage directories
+    // Wait for processes to fully exit and release file locks
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Aggressively remove test storage directories with retry logic
+    // This is CRITICAL to prevent instance cache issues that cause connection failures
     for (const dir of [SERVER_STORAGE_DIR, CLIENT_STORAGE_DIR]) {
-        if (fs.existsSync(dir)) {
+        let retries = 3;
+        while (retries > 0) {
             try {
-                fs.rmSync(dir, { recursive: true, force: true });
-                console.log(`   Removed ${dir}`);
+                if (fs.existsSync(dir)) {
+                    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
+                    console.log(`   Removed ${dir}`);
+                }
+                break;
             } catch (err) {
-                console.log(`   Failed to remove ${dir}:`, err.message);
+                retries--;
+                if (retries === 0) {
+                    console.log(`   ⚠️  Failed to remove ${dir} after retries:`, err.message);
+                    console.log(`   ⚠️  This may cause test failures due to cached instance state!`);
+                } else {
+                    console.log(`   Retrying removal of ${dir}... (${3 - retries}/3)`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
             }
         }
     }
@@ -591,6 +612,10 @@ async function runConnectionTest() {
         console.log('   ✅ ProjFS virtualization is working correctly');
         console.log('   ✅ PairingFileSystem is exposing invite files');
         console.log('   ✅ Invite content is valid and ready for connection');
+
+        // Wait for server to fully register with CommServer
+        console.log('\n   Waiting for server to register with CommServer...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         // Test 8: Start CLIENT instance
         console.log('\n🔟 Starting CLIENT refinio.api instance...');

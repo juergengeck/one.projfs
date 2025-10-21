@@ -8,6 +8,15 @@
     ".": "./index.js",
     "./IFSProjFSProvider.js": "./IFSProjFSProvider.js"
   },
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "build": "node-gyp rebuild",
+    "rebuild": "node-gyp rebuild",
+    "clean": "node-gyp clean",
+    "test": "node test/integration/connection-test.js",
+    "test:clean": "npm run clean:test && npm test",
+    "clean:test": "node -e \"const fs = require('fs'); const path = require('path'); try { fs.rmSync('C:/Temp/refinio-api-server-instance', { recursive: true, force: true }); fs.rmSync('C:/Temp/refinio-api-client-instance', { recursive: true, force: true }); fs.rmSync('C:/OneFiler-Test', { recursive: true, force: true }); console.log('Test directories cleaned'); } catch(e) { console.log('Cleanup complete (some dirs may not exist)'); }\""
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/refinio/one.projfs.git"
@@ -26,5 +35,8 @@
   "dependencies": {
     "bindings": "^1.5.0",
     "node-addon-api": "^8.5.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.0.0"
   }
 }

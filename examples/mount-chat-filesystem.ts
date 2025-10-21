@@ -4,7 +4,7 @@
  * This example shows how to expose ONE's chat content through Windows Explorer
  */
 
-import { mountIFileSystem } from '@refinio/one.ifsprojfs';
+import { mountIFileSystem } from '@refinio/one.projfs';
 import { ChatFileSystem } from '@refinio/one.models/lib/fileSystems/ChatFileSystem.js';
 import { createDefaultInstance } from '@refinio/one.core/lib/instance.js';
 

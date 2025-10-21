@@ -204,6 +204,161 @@ The ERROR_IO_PENDING flow is implemented in:
 - `CompletePendingFileRequests`: Completes commands when content arrives
 - `AsyncBridge`: Coordinates between C++ callbacks and JavaScript IFileSystem
 
+## Building and Testing
+
+### Build Commands
+
+```bash
+npm install          # Builds native module automatically
+npm run build        # Rebuild native module
+npm run rebuild      # Clean rebuild
+npm run clean        # Clean build artifacts
+```
+
+### Testing
+
+```bash
+npm test             # Run integration tests
+npm run test:clean   # Clean test directories and run tests
+```
+
+**IMPORTANT**: The integration tests require clean state. If tests fail with connection errors, run:
+```bash
+npm run clean:test   # Clean cached instance directories
+npm test             # Run tests again
+```
+
+## Troubleshooting
+
+### ProjFS Native Module Not Loading
+
+**Error**: `The specified module could not be found: build\Release\ifsprojfs.node`
+
+**Cause**: ProjFS Windows feature not enabled or native dependencies missing.
+
+**Solution**:
+```powershell
+# Enable ProjFS (Run PowerShell as Administrator)
+Enable-WindowsOptionalFeature -Online -FeatureName Client-ProjFS
+
+# Restart your computer
+# Then rebuild the module
+npm rebuild
+```
+
+**Requirements**:
+- Windows 10 version 1809 (October 2018 Update) or later
+- ProjFS feature enabled
+- Visual Studio 2019+ with C++ build tools
+- Windows SDK with ProjFS headers
+
+### Integration Test Connection Failures
+
+**Error**: `No listening connection for the specified publicKey`
+
+**Cause**: Cached instance state from previous test runs prevents proper initialization.
+
+**Solution**:
+```bash
+# Clean ALL test state
+npm run clean:test
+
+# Run tests with fresh state
+npm test
+```
+
+**What gets cleaned**:
+- `C:\Temp\refinio-api-server-instance` - Server ONE instance cache
+- `C:\Temp\refinio-api-client-instance` - Client ONE instance cache
+- `C:\OneFiler-Test` - Test mount point
+
+**Why this happens**: ONE instances cache cryptographic keys and connection state. Stale cache causes the ConnectionsModel to not properly register with the CommServer, resulting in connection failures.
+
+### System Clock Issues
+
+**Error**: Connection failures or "token expired" errors
+
+**Cause**: System clock significantly off from actual time.
+
+**Solution**: Ensure your system clock is accurate. The CommServer and invitation tokens use timestamps for validation.
+
+### Invitation Token Reuse
+
+**Symptom**: New invitation created on every file read
+
+**Cause**: Bug in `PairingFileSystem.getAndRefreshIopInviteIfNoneExists()` not checking if invitation exists.
+
+**Fixed in**: `@refinio/one.models` - The method now properly caches and reuses invitations.
+
+**Impact**: Without this fix, each file read creates a new token, but only the latest token is valid on the CommServer, causing "No listening connection" errors.
+
+### Mount Point Already in Use
+
+**Error**: `Mount point already exists` or ProjFS mount fails
+
+**Cause**: Previous mount not properly unmounted.
+
+**Solution**:
+```bash
+# On Windows, check if directory is a reparse point
+dir C:\OneFiler-Test
+
+# If it shows <JUNCTION> or <SYMLINKD>, remove it
+rmdir C:\OneFiler-Test
+
+# Or use the cleanup script
+npm run clean:test
+```
+
+### Build Failures
+
+**Error**: `error MSB8036: The Windows SDK version X was not found`
+
+**Solution**: Install the correct Windows SDK or update `binding.gyp` to match your SDK version.
+
+**Error**: `Cannot find module 'node-gyp'`
+
+**Solution**:
+```bash
+npm install --save-dev node-gyp
+npm rebuild
+```
+
+### Performance Issues
+
+If you experience slow file access:
+
+1. **Check cache TTL**: Default is 30 seconds. Adjust in your IFSProjFSProvider config:
+   ```javascript
+   new IFSProjFSProvider({
+       cacheTTL: 60  // Increase to 60 seconds
+   })
+   ```
+
+2. **Monitor cache hits**: Look for `[Cache] HIT` vs `[Cache] MISS` in debug logs
+
+3. **BLOB location**: Ensure BLOBs are on fast storage (SSD recommended)
+
+### Debug Logging
+
+Enable detailed logging by setting environment variables before starting:
+
+```bash
+# Windows CMD
+set NODE_DEBUG=one.projfs
+npm test
+
+# PowerShell
+$env:NODE_DEBUG="one.projfs"
+npm test
+```
+
+Look for log prefixes:
+- `[ProjFS]` - Native ProjFS operations
+- `[Cache]` - Cache hits/misses
+- `[Native]` - C++ bridge operations
+- `[PairingFileSystem]` - Invitation creation
+
 ## License
 
 MIT
