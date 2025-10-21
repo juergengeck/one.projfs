@@ -1,7 +1,19 @@
 /**
  * Example: Mount ChatFileSystem via ProjFS
- * 
- * This example shows how to expose ONE's chat content through Windows Explorer
+ *
+ * This example shows how to expose ONE's chat content through Windows Explorer.
+ *
+ * NOTE: This is a TypeScript reference example only. The one.projfs module itself
+ * is written in JavaScript and C++. To use this example:
+ * 1. Copy the code structure to your TypeScript project
+ * 2. Compile with your project's TypeScript configuration
+ * 3. Ensure @refinio/one.projfs, @refinio/one.models, and @refinio/one.core are installed
+ *
+ * For a working JavaScript example, see the integration test:
+ *   test/integration/connection-test.js
+ *
+ * Or the production integration in refinio.api:
+ *   ../refinio.api/src/index.ts (lines 199-237)
  */
 
 import { mountIFileSystem } from '@refinio/one.projfs';

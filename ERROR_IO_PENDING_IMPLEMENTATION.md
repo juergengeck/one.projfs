@@ -1,6 +1,6 @@
 # ERROR_IO_PENDING Implementation
 
-This document describes the implementation of the ERROR_IO_PENDING pattern in the one.ifsprojfs module, as specified in fix.md.
+This document describes the implementation of the ERROR_IO_PENDING pattern in the one.projfs native module for Windows ProjFS.
 
 ## Overview
 
@@ -68,21 +68,9 @@ HRESULT completeHr = PrjCompleteCommand(
 
 ### 4. Integration with Cache System
 
-**File**: `src/filer/CachedProjFSProvider.ts:354-365`
+**File**: `IFSProjFSProvider.js`
 
-When JavaScript fetches content, it automatically triggers command completion:
-```typescript
-// Push content to native cache immediately
-if (self.nativeProvider && typeof (self.nativeProvider as any).setCachedContent === 'function') {
-    const content = Buffer.isBuffer(result.content) ? result.content : Buffer.from(result.content);
-    (self.nativeProvider as any).setCachedContent(path, content);
-    
-    // Complete any pending file requests for this path
-    if (typeof (self.nativeProvider as any).completePendingFileRequests === 'function') {
-        (self.nativeProvider as any).completePendingFileRequests(path);
-    }
-}
-```
+When JavaScript fetches content, it automatically triggers command completion by calling the native `setCachedContent` and `completePendingFileRequests` methods exposed through N-API bindings.
 
 ## Benefits
 

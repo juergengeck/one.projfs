@@ -1,8 +1,8 @@
-# Integration with one.filer
+# Integration with refinio.api and one.filer
 
 ## Overview
 
-The `one.ifsprojfs` module is designed to replace the complex 7-layer abstraction stack in one.filer, providing direct Windows filesystem integration for ONE content. This enables users to access their ONE database through Windows Explorer as a virtual drive.
+The `one.projfs` module provides native Windows ProjFS integration, replacing complex multi-layer abstraction stacks. It enables users to access their ONE database through Windows Explorer as a virtual drive with direct filesystem access.
 
 ## Clean Architecture
 
@@ -29,72 +29,73 @@ Windows Explorer
     ↓
 Windows ProjFS
     ↓
-one.ifsprojfs (with caching)
+one.projfs (with caching)
     ↓
 IFileSystem (ChatFileSystem, etc.)
 ```
 
-## Integration into one.filer
+## Integration Example (refinio.api)
 
-To use this module in one.filer, update the FilerWithProjFS class:
+The refinio.api server demonstrates integration with one.projfs:
 
 ```typescript
-// one.filer/src/filer/FilerWithProjFS.ts
+// refinio.api/src/index.ts
 
-import { IFSProjFSProvider } from '@refinio/one.ifsprojfs';
-import { CombinedFileSystem } from '@refinio/one.models/lib/fileSystems/CombinedFileSystem.js';
+import { IFSProjFSProvider } from '@refinio/one.projfs';
+import { createCompleteFiler } from './filer/createFilerWithPairing.js';
 
-export class FilerWithProjFS {
-    private projfsProvider: IFSProjFSProvider | null = null;
-    
-    async initProjFS(): Promise<void> {
-        // Replace the 7-layer stack with direct integration
-        const fileSystems = [
-            new ChatFileSystem(this.models.leuteModel, this.models.topicModel, this.models.channelManager),
-            new ObjectsFileSystem(),
-            new DebugFileSystem(/* instance */),
-            new TypesFileSystem(),
-            new PairingFileSystem(this.models.iomManager)
-        ];
-        
-        const rootFS = new CombinedFileSystem(fileSystems);
-        
-        // Use one.ifsprojfs instead of projfs-fuse.one
-        this.projfsProvider = new IFSProjFSProvider({
-            instancePath: this.instanceDirectory,
-            virtualRoot: this.config.projfsRoot || 'C:\\OneFiler',
-            fileSystem: rootFS,
-            cacheTTL: 30
-        });
-        
-        await this.projfsProvider.mount();
-        console.log(`ONE content now accessible at ${this.config.projfsRoot}`);
-    }
-    
-    async shutdown(): Promise<void> {
-        if (this.projfsProvider) {
-            await this.projfsProvider.unmount();
-        }
-    }
+// Initialize all ONE models (LeuteModel, ChannelManager, etc.)
+// ...models initialization...
+
+// Create complete filer with all 7 filesystems
+const completeFiler = await createCompleteFiler(
+    leuteModel,
+    channelManager,
+    iomManager,
+    topicModel,
+    questionnaireModel,
+    journalModel,
+    connectionsModel,
+    inviteUrlPrefix
+);
+
+// Mount via ProjFS
+if (config.filer?.mountPoint) {
+    const { IFileSystemAdapter } = await import('./filer/IFileSystemAdapter.js');
+    const adapter = new IFileSystemAdapter(
+        completeFiler,
+        config.filer.mountPoint,
+        instancePath
+    );
+    await adapter.mount();
+    console.log(`Filesystem mounted at ${config.filer.mountPoint}`);
 }
 ```
 
-## Running one.filer with one.ifsprojfs
+For complete implementation, see `refinio.api/src/index.ts:199-237`.
+
+## Running refinio.api with ProjFS
 
 ```bash
-# Start one.filer with ProjFS enabled
-node lib/index.js start --secret "your-secret" --config config.json
+# Start refinio.api with ProjFS enabled
+cd refinio.api
 
-# config.json:
-{
-  "useFiler": true,
-  "filerConfig": {
-    "useProjFS": true,
-    "projfsRoot": "C:\\OneFiler",
-    "projfsCacheSize": 104857600  // 100MB cache
-  }
-}
+# Set environment variables
+set REFINIO_INSTANCE_SECRET=your-secret-123
+set REFINIO_INSTANCE_EMAIL=user@example.com
+set REFINIO_COMM_SERVER_URL=ws://localhost:8000
+set REFINIO_FILER_MOUNT_POINT=C:\OneFiler
+set REFINIO_FILER_INVITE_URL_PREFIX=https://one.refinio.net/invite
+
+# Start server
+node dist/index.js
 ```
+
+The server automatically:
+1. Initializes all ONE models
+2. Creates complete filesystem with 7 sub-filesystems
+3. Mounts to specified mount point
+4. Listens for connections on configured port
 
 ## What Users Experience
 
@@ -114,29 +115,34 @@ node lib/index.js start --secret "your-secret" --config config.json
 4. **Clean Architecture**: Just 2 layers instead of 7
 5. **User Experience**: Seamless Windows Explorer integration
 
-## Migration Steps for one.filer
+## Setup Steps
 
-1. **Install one.ifsprojfs**:
+1. **Build one.projfs**:
    ```bash
-   cd one.ifsprojfs
+   cd one.projfs
    npm install
    npm run build
-   cd ..
    ```
 
-2. **Update FilerWithProjFS.ts** to import and use `IFSProjFSProvider`
-
-3. **Remove Old Dependencies**:
-   - projfs-fuse.one
-   - FUSE emulation layers
-   - Complex adapter classes
-
-4. **Test the Integration**:
+2. **Build dependencies**:
    ```bash
-   one-filer start --secret "test" --filer --filer-mount-point "C:\OneFiler"
+   cd ../packages/one.core
+   npm run build
+
+   cd ../one.models
+   npm run build
+
+   cd ../../refinio.api
+   npm run build
    ```
 
-5. **Verify Performance**: Check that file operations are 10-100x faster
+3. **Test the integration**:
+   ```bash
+   cd ../one.projfs
+   npm run test:clean
+   ```
+
+4. **Verify Performance**: Check that file operations are 10-100x faster than FUSE-based approaches
 
 ## Technical Details
 
@@ -151,7 +157,7 @@ User → Explorer → ProjFS → projfs-fuse.one → FUSE3 emulation
 
 #### After (2-layer clean architecture):
 ```
-User → Explorer → ProjFS → one.ifsprojfs → IFileSystem → ONE Models
+User → Explorer → ProjFS → one.projfs → IFileSystem → ONE Models
 ```
 
 ### How It Works
@@ -180,19 +186,20 @@ User → Explorer → ProjFS → one.ifsprojfs → IFileSystem → ONE Models
 
 ## Configuration Options
 
-```json
-{
-  "filerConfig": {
-    "useProjFS": true,              // Enable one.ifsprojfs
-    "projfsRoot": "C:\\OneFiler",   // Virtual drive location
-    "projfsCacheSize": 104857600,   // Cache size (100MB)
-    "cacheTTL": 30,                 // Cache TTL in seconds
-    "prefetchPaths": [              // Pre-cache these paths
-      "/chats",
-      "/debug"
-    ]
-  }
-}
+Configuration via environment variables (see refinio.api):
+
+```bash
+# Required
+REFINIO_INSTANCE_SECRET=your-secret
+REFINIO_INSTANCE_EMAIL=user@example.com
+
+# ProjFS Configuration
+REFINIO_FILER_MOUNT_POINT=C:\OneFiler  # Enable ProjFS mounting
+REFINIO_FILER_INVITE_URL_PREFIX=https://one.refinio.net/invite
+
+# Optional
+REFINIO_COMM_SERVER_URL=ws://localhost:8000
+REFINIO_WIPE_STORAGE=true  # Clean start for testing
 ```
 
 ## Troubleshooting
@@ -206,7 +213,7 @@ Enable-WindowsOptionalFeature -Online -FeatureName Client-ProjFS -NoRestart
 ### Build Issues
 ```bash
 # Rebuild native module
-cd one.ifsprojfs
+cd one.projfs
 npm run rebuild
 ```
 
