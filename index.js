@@ -1,3 +1,4 @@
 // Export the enhanced IFSProjFSProvider with EventEmitter support
-const IFSProjFSProvider = require('./IFSProjFSProvider.js');
-module.exports = { IFSProjFSProvider };
+import IFSProjFSProvider from './IFSProjFSProvider.js';
+export { IFSProjFSProvider };
+export default IFSProjFSProvider;

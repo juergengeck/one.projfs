@@ -2,6 +2,7 @@
   "name": "@refinio/one.projfs",
   "version": "1.0.0",
   "description": "Windows Projected File System (ProjFS) native addon for Node.js",
+  "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
   "exports": {

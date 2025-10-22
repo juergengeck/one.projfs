@@ -1,7 +1,11 @@
-const EventEmitter = require('events');
+import { EventEmitter } from 'events';
+import { createRequire } from 'module';
+import fs from 'fs';
+import path from 'path';
+
+// Create require for native module loading
+const require = createRequire(import.meta.url);
 const NativeProvider = require('./build/Release/ifsprojfs.node').IFSProjFSProvider;
-const fs = require('fs');
-const path = require('path');
 
 // File logging - use a fixed path that works in both webpack and direct node contexts
 const LOG_FILE = 'C:\\Users\\juerg\\source\\one.filer.windows\\projfs-operations.log';
@@ -607,4 +611,4 @@ class IFSProjFSProvider extends EventEmitter {
     }
 }
 
-module.exports = IFSProjFSProvider;
+export default IFSProjFSProvider;

@@ -11,6 +11,10 @@
  * 5. Bidirectional contact creation works after connection
  * 6. Cleans up: unmounts and stops server
  *
+ * Usage:
+ *   node connection-test.js                  # Run test and cleanup automatically
+ *   node connection-test.js --interactive    # Wait for CTRL+C before cleanup (inspect mount point)
+ *
  * Prerequisites:
  * - Windows 10 1809 or later with ProjFS enabled
  * - refinio.api built and available (../refinio.api)
@@ -27,16 +31,21 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Configuration
-const MOUNT_POINT = process.env.ONE_FILER_MOUNT || 'C:\\OneFiler-Test';
+// Parse command-line arguments
+const args = process.argv.slice(2);
+const INTERACTIVE_MODE = args.includes('--interactive');
+
+// Configuration - All test files in a single parent directory
+const TEST_DIR = path.join(os.tmpdir(), 'OneFiler-Test2');
+const MOUNT_POINT = path.join(TEST_DIR, 'mount');
 const INVITES_PATH = path.join(MOUNT_POINT, 'invites');
 const IOP_INVITE_FILE = path.join(INVITES_PATH, 'iop_invite.txt');
 const IOM_INVITE_FILE = path.join(INVITES_PATH, 'iom_invite.txt');
 
 // Path to refinio.api (relative to one.projfs/test/integration/)
 const REFINIO_API_DIR = path.resolve(__dirname, '../../../refinio.api');
-const SERVER_STORAGE_DIR = 'C:\\Temp\\refinio-api-server-instance';
-const CLIENT_STORAGE_DIR = 'C:\\Temp\\refinio-api-client-instance';
+const SERVER_STORAGE_DIR = path.join(TEST_DIR, 'server-instance');
+const CLIENT_STORAGE_DIR = path.join(TEST_DIR, 'client-instance');
 const COMM_SERVER_PORT = 8000;
 const SERVER_PORT = 50123;
 const CLIENT_PORT = 50125;
@@ -125,37 +134,25 @@ async function cleanupTestEnvironment() {
     // Wait for processes to fully exit and release file locks
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Aggressively remove test storage directories with retry logic
+    // Remove entire test directory with retry logic
     // This is CRITICAL to prevent instance cache issues that cause connection failures
-    for (const dir of [SERVER_STORAGE_DIR, CLIENT_STORAGE_DIR]) {
-        let retries = 3;
-        while (retries > 0) {
-            try {
-                if (fs.existsSync(dir)) {
-                    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
-                    console.log(`   Removed ${dir}`);
-                }
-                break;
-            } catch (err) {
-                retries--;
-                if (retries === 0) {
-                    console.log(`   ⚠️  Failed to remove ${dir} after retries:`, err.message);
-                    console.log(`   ⚠️  This may cause test failures due to cached instance state!`);
-                } else {
-                    console.log(`   Retrying removal of ${dir}... (${3 - retries}/3)`);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
-        }
-    }
-
-    // Remove mount point directory (will fail if ProjFS is still mounted, which is ok)
-    if (fs.existsSync(MOUNT_POINT)) {
+    let retries = 3;
+    while (retries > 0) {
         try {
-            fs.rmdirSync(MOUNT_POINT);
-            console.log(`   Removed ${MOUNT_POINT}`);
+            if (fs.existsSync(TEST_DIR)) {
+                fs.rmSync(TEST_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
+                console.log(`   Removed ${TEST_DIR}`);
+            }
+            break;
         } catch (err) {
-            console.log(`   Note: ${MOUNT_POINT} still exists (may be mounted)`);
+            retries--;
+            if (retries === 0) {
+                console.log(`   ⚠️  Failed to remove ${TEST_DIR} after retries:`, err.message);
+                console.log(`   ⚠️  This may cause test failures due to cached instance state!`);
+            } else {
+                console.log(`   Retrying removal of ${TEST_DIR}... (${3 - retries}/3)`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
     }
 
@@ -454,6 +451,7 @@ async function runConnectionTest() {
     console.log('🔗 ONE.projfs Connection Integration Test\n');
     console.log('=' .repeat(70));
     console.log(`Platform: Windows (ProjFS)`);
+    console.log(`Test Directory: ${TEST_DIR}`);
     console.log(`Mount Point: ${MOUNT_POINT}`);
     console.log(`Invites Path: ${INVITES_PATH}\n`);
 
@@ -654,6 +652,25 @@ async function runConnectionTest() {
         console.log('   ✅ Connection established successfully');
         console.log('   ✅ Bidirectional contacts created');
         console.log('   ✅ Integration test PASSED!');
+
+        // Interactive mode: wait for user inspection before cleanup
+        if (INTERACTIVE_MODE) {
+            console.log('\n' + '='.repeat(70));
+            console.log('🔍 INTERACTIVE MODE');
+            console.log('='.repeat(70));
+            console.log('\nMount point is ready for inspection:');
+            console.log(`   ${MOUNT_POINT}`);
+            console.log('\nServer instance directory:');
+            console.log(`   ${SERVER_STORAGE_DIR}`);
+            console.log('\nClient instance directory:');
+            console.log(`   ${CLIENT_STORAGE_DIR}`);
+            console.log('\n👉 Press CTRL+C to cleanup and exit');
+            console.log('='.repeat(70));
+            console.log('\n⏳ Waiting for CTRL+C...\n');
+
+            // Wait indefinitely until CTRL+C
+            await new Promise(() => {});
+        }
 
     } catch (error) {
         console.error('\n❌ Test Failed:', error.message);
