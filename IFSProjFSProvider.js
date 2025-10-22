@@ -413,7 +413,8 @@ class IFSProjFSProvider extends EventEmitter {
 
                 // Cache critical subdirectories INCLUDING invites
                 // We MUST cache invites BEFORE mount to avoid timeout issues
-                const criticalDirs = ['/debug', '/chats', '/invites'];
+                // NOTE: /objects is slow to populate with many objects, but we include it for completeness
+                const criticalDirs = ['/debug', '/chats', '/invites', '/objects', '/types', '/profiles', '/questionnaires'];
 
                 // Process all critical directories
                 for (const dir of criticalDirs) {
