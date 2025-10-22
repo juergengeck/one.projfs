@@ -265,9 +265,10 @@ class IFSProjFSProvider extends EventEmitter {
                 }
                 
                 seen.add(name);
-                
+
                 try {
-                    const childPath = normalizedPath + '/' + name;
+                    // Avoid double slashes when normalizedPath is root
+                    const childPath = normalizedPath === '/' ? '/' + name : normalizedPath + '/' + name;
                     const info = await this.fileSystem.stat(childPath);
 
                     // Determine if it's a directory from either isDirectory flag or mode field
@@ -319,7 +320,8 @@ class IFSProjFSProvider extends EventEmitter {
 
             // Also cache individual FileInfo for each entry so GetPlaceholderInfo can find them
             for (const entry of validEntries) {
-                const entryPath = normalizedPath + '/' + entry.name;
+                // Avoid double slashes when normalizedPath is root
+                const entryPath = normalizedPath === '/' ? '/' + entry.name : normalizedPath + '/' + entry.name;
                 this.setCachedFileInfo(entryPath, entry);
                 log(`  Cached FileInfo for ${entryPath}`);
             }

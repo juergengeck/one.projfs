@@ -495,8 +495,28 @@ async function runConnectionTest() {
         testResults.mountPointExists = true;
         console.log(`✅ Mount point exists: ${MOUNT_POINT}`);
 
-        // Test 2: Check invites directory exists
-        console.log('\n4️⃣ Checking invites directory...');
+        // Test 2: Check all expected directories exist
+        console.log('\n4️⃣ Checking mounted filesystems...');
+        const expectedDirs = ['chats', 'debug', 'invites', 'objects', 'types', 'profiles', 'questionnaires'];
+        const mountedDirs = fs.readdirSync(MOUNT_POINT).filter(item => {
+            const itemPath = path.join(MOUNT_POINT, item);
+            return fs.statSync(itemPath).isDirectory();
+        });
+
+        console.log(`   Expected directories: ${expectedDirs.join(', ')}`);
+        console.log(`   Found directories: ${mountedDirs.join(', ')}`);
+
+        const missingDirs = expectedDirs.filter(dir => !mountedDirs.includes(dir));
+        if (missingDirs.length > 0) {
+            throw new Error(`Missing directories in mount point: ${missingDirs.join(', ')}\n` +
+                           `   Only found: ${mountedDirs.join(', ')}\n` +
+                           `   This suggests the Filer filesystem was not mounted correctly.`);
+        }
+
+        console.log(`✅ All ${expectedDirs.length} directories mounted correctly`);
+
+        // Test 3: Check invites directory exists
+        console.log('\n5️⃣ Checking invites directory...');
         if (!fs.existsSync(INVITES_PATH)) {
             throw new Error(`Invites directory not found: ${INVITES_PATH}\n` +
                            `   The PairingFileSystem may not be mounted.`);
@@ -508,24 +528,24 @@ async function runConnectionTest() {
         const inviteFiles = fs.readdirSync(INVITES_PATH);
         console.log(`   Files in invites/: ${inviteFiles.join(', ')}`);
 
-        // Test 3: Check IOP invite file exists
-        console.log('\n5️⃣ Checking IOP (Instance of Person) invite file...');
+        // Test 4: Check IOP invite file exists
+        console.log('\n6️⃣ Checking IOP (Instance of Person) invite file...');
         if (!fs.existsSync(IOP_INVITE_FILE)) {
             throw new Error(`IOP invite file not found: ${IOP_INVITE_FILE}`);
         }
         testResults.iopInviteExists = true;
         console.log(`✅ IOP invite file exists: ${IOP_INVITE_FILE}`);
 
-        // Test 4: Check IOM invite file exists
-        console.log('\n6️⃣ Checking IOM (Instance of Machine) invite file...');
+        // Test 5: Check IOM invite file exists
+        console.log('\n7️⃣ Checking IOM (Instance of Machine) invite file...');
         if (!fs.existsSync(IOM_INVITE_FILE)) {
             throw new Error(`IOM invite file not found: ${IOM_INVITE_FILE}`);
         }
         testResults.iomInviteExists = true;
         console.log(`✅ IOM invite file exists: ${IOM_INVITE_FILE}`);
 
-        // Test 5: Read and validate IOP invite
-        console.log('\n7️⃣ Reading and validating IOP invite...');
+        // Test 6: Read and validate IOP invite
+        console.log('\n8️⃣ Reading and validating IOP invite...');
         let iopInviteContent;
         try {
             iopInviteContent = fs.readFileSync(IOP_INVITE_FILE, 'utf-8').trim();
@@ -555,8 +575,8 @@ async function runConnectionTest() {
             throw new Error(`Invalid IOP invite format: ${parseError.message}`);
         }
 
-        // Test 6: Read and validate IOM invite
-        console.log('\n8️⃣ Reading and validating IOM invite...');
+        // Test 7: Read and validate IOM invite
+        console.log('\n9️⃣ Reading and validating IOM invite...');
         let iomInviteContent;
         try {
             iomInviteContent = fs.readFileSync(IOM_INVITE_FILE, 'utf-8').trim();
@@ -584,8 +604,8 @@ async function runConnectionTest() {
             throw new Error(`Invalid IOM invite format: ${parseError.message}`);
         }
 
-        // Test 7: Verify both invites use same CommServer
-        console.log('\n9️⃣ Verifying CommServer consistency...');
+        // Test 8: Verify both invites use same CommServer
+        console.log('\n🔟 Verifying CommServer consistency...');
         if (iopInviteData.url !== iomInviteData.url) {
             console.log(`⚠️  Warning: IOP and IOM invites use different CommServers`);
             console.log(`   IOP: ${iopInviteData.url}`);
@@ -646,11 +666,32 @@ async function runConnectionTest() {
             throw new Error('No contacts found on either side - connection failed');
         }
 
+        // Verify profiles directory has entries after pairing
+        console.log('\n1️⃣1️⃣ Verifying profiles directory after pairing...');
+        const profilesDir = path.join(MOUNT_POINT, 'profiles');
+        if (!fs.existsSync(profilesDir)) {
+            throw new Error(`Profiles directory not found: ${profilesDir}`);
+        }
+
+        const profileEntries = fs.readdirSync(profilesDir);
+        console.log(`   Found ${profileEntries.length} profile(s) in /profiles`);
+
+        if (profileEntries.length === 0) {
+            throw new Error('No profiles found after pairing!\n' +
+                           '   Expected at least 1 profile entry after successful connection.\n' +
+                           '   This suggests contact creation may have failed.');
+        }
+
+        console.log(`✅ Profiles directory contains ${profileEntries.length} entry/entries`);
+        console.log(`   Profile entries: ${profileEntries.join(', ')}`);
+
         console.log('\n🎉 Final Results:');
+        console.log('   ✅ All 7 directories mounted correctly');
         console.log('   ✅ ProjFS mount working correctly');
         console.log('   ✅ Invite files readable from real filesystem');
         console.log('   ✅ Connection established successfully');
         console.log('   ✅ Bidirectional contacts created');
+        console.log(`   ✅ Profile entries created (${profileEntries.length} found)`);
         console.log('   ✅ Integration test PASSED!');
 
         // Interactive mode: wait for user inspection before cleanup
