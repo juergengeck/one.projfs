@@ -145,31 +145,45 @@ HRESULT CALLBACK ProjFSProvider::GetPlaceholderInfoCallback(const PRJ_CALLBACK_D
     std::string virtualPath = relativePath.empty() ? "/" : "/" + relativePath;
     
     std::cout << "[ProjFS] GetPlaceholderInfo for: " << virtualPath << std::endl;
-    
-    // Special handling for root directories - always return them as directories
-    if (virtualPath == "/chats" || virtualPath == "/debug" || virtualPath == "/invites" ||
-        virtualPath == "/objects" || virtualPath == "/types") {
 
-        // Create proper directory metadata
-        ObjectMetadata dirMetadata;
-        dirMetadata.exists = true;
-        dirMetadata.isDirectory = true;
-        dirMetadata.size = 0;
-        dirMetadata.type = "DIRECTORY";
-
-        PRJ_PLACEHOLDER_INFO placeholderInfo = {};
-        placeholderInfo.FileBasicInfo = provider->CreateFileBasicInfo(dirMetadata);
-
-        return PrjWritePlaceholderInfo(
-            callbackData->NamespaceVirtualizationContext,
-            callbackData->FilePathName,
-            &placeholderInfo,
-            sizeof(placeholderInfo)
-        );
-    }
-    
-    // Try to get from cache first
+    // Get cache reference for both root mount point check and file info lookup
     auto cache = provider->asyncBridge_ ? provider->asyncBridge_->GetCache() : nullptr;
+
+    // Check if this is a root-level mount point by querying the cached root directory listing
+    // This avoids hardcoding directory names and automatically handles any mount points
+    if (cache && virtualPath.length() > 1 && virtualPath.find('/', 1) == std::string::npos) {
+        // Path is of form "/something" (single level, potential root mount point)
+        auto rootListing = cache->GetDirectoryListing("/");
+        if (rootListing) {
+            std::string pathName = virtualPath.substr(1); // Remove leading '/'
+
+            // Check if this path exists in the root directory listing
+            for (const auto& entry : rootListing->entries) {
+                if (entry.name == pathName && entry.isDirectory) {
+                    std::cout << "[ProjFS] Detected root mount point: " << virtualPath << std::endl;
+
+                    // This is a root-level mount point - return consistent directory metadata
+                    ObjectMetadata dirMetadata;
+                    dirMetadata.exists = true;
+                    dirMetadata.isDirectory = true;
+                    dirMetadata.size = 0;
+                    dirMetadata.type = "DIRECTORY";
+
+                    PRJ_PLACEHOLDER_INFO placeholderInfo = {};
+                    placeholderInfo.FileBasicInfo = provider->CreateFileBasicInfo(dirMetadata);
+
+                    return PrjWritePlaceholderInfo(
+                        callbackData->NamespaceVirtualizationContext,
+                        callbackData->FilePathName,
+                        &placeholderInfo,
+                        sizeof(placeholderInfo)
+                    );
+                }
+            }
+        }
+    }
+
+    // Try to get file info from cache
     if (cache) {
         // First check if we have specific file info
         auto fileInfo = cache->GetFileInfo(virtualPath);

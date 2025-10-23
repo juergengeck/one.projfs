@@ -274,12 +274,11 @@ class IFSProjFSProvider extends EventEmitter {
                     // Determine if it's a directory from either isDirectory flag or mode field
                     let isDir = info.isDirectory || (info.mode && (info.mode & 0o040000) === 0o040000);
 
-                    // WORKAROUND: Known filesystem mount points are always directories
-                    // The TemporaryFileSystem doesn't correctly identify mounted filesystems as directories
-                    if (normalizedPath === '/' && (name === 'chats' || name === 'debug' || name === 'invites' ||
-                                                   name === 'objects' || name === 'types' || name === 'test-data')) {
+                    // Ensure all root-level children are marked as directories
+                    // This is a safety check in case the filesystem doesn't set the directory bit correctly
+                    if (normalizedPath === '/' && dir.children && dir.children.includes(name)) {
                         isDir = true;
-                        log(`  FORCED directory flag for mount point: ${name}`);
+                        log(`  Verified directory flag for root mount point: ${name}`);
                     }
 
                     const entry = {
@@ -413,8 +412,9 @@ class IFSProjFSProvider extends EventEmitter {
 
                 // Cache critical subdirectories INCLUDING invites
                 // We MUST cache invites BEFORE mount to avoid timeout issues
-                // NOTE: /objects is slow to populate with many objects, but we include it for completeness
-                const criticalDirs = ['/debug', '/chats', '/invites', '/objects', '/types', '/profiles', '/questionnaires'];
+                // NOTE: /objects is slow to populate with many objects
+                // We cache ALL directories to prevent them appearing empty
+                const criticalDirs = ['/chats', '/debug', '/invites', '/objects', '/profiles', '/questionnaires', '/types'];
 
                 // Process all critical directories
                 for (const dir of criticalDirs) {
