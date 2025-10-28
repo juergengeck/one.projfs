@@ -551,14 +551,7 @@ HRESULT CALLBACK ProjFSProvider::StartDirectoryEnumerationCallback(
     
     std::cout << "[ProjFS] START ENUM " << guidStr << " for path: " << path
         << " (active: " << provider->stats_.activeEnumerations << ")" << std::endl;
-    
-    // Special handling for root directory to prevent infinite duplicates
-    if (path == "[ROOT]") {
-        provider->rootEnumerationCount_++;
-        std::cout << "[ProjFS] Root enumeration #" << provider->rootEnumerationCount_ 
-                  << " - rootComplete: " << provider->rootEnumerationComplete_ << std::endl;
-    }
-    
+
     if (provider->asyncBridge_) {
         std::stringstream msg;
         msg << "[ProjFS] START ENUM " << guidStr << " for path: " << path

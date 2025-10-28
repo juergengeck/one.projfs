@@ -276,9 +276,16 @@ class IFSProjFSProvider extends EventEmitter {
 
                     // Ensure all root-level children are marked as directories
                     // This is a safety check in case the filesystem doesn't set the directory bit correctly
-                    if (normalizedPath === '/' && dir.children && dir.children.includes(name)) {
-                        isDir = true;
-                        log(`  Verified directory flag for root mount point: ${name}`);
+                    if (normalizedPath === '/' && dir.children) {
+                        console.log(`[IFSProjFSProvider] Checking if '${name}' is in dir.children:`, dir.children);
+                        if (dir.children.includes(name)) {
+                            isDir = true;
+                            console.log(`[IFSProjFSProvider] ✅ Verified directory flag for root mount point: ${name} (was ${isDir})`);
+                        } else {
+                            console.log(`[IFSProjFSProvider] ⚠️  '${name}' NOT in dir.children!`);
+                        }
+                    } else {
+                        console.log(`[IFSProjFSProvider] dir.children not available for ${normalizedPath}`);
                     }
 
                     const entry = {
@@ -406,17 +413,16 @@ class IFSProjFSProvider extends EventEmitter {
         if (this.fileSystem) {
             log('Pre-populating directory caches...');
             try {
-                // Cache root directory
+                // Cache root directory ONLY
+                // TESTING: Skip subdirectory pre-population to see if it causes duplicates
                 const rootEntries = await this.readDirectory('/');
                 log(`Pre-populated root with ${rootEntries.length} entries`);
+                log(`Skipping subdirectory pre-population to test duplicate issue`);
 
-                // Cache critical subdirectories INCLUDING invites
-                // We MUST cache invites BEFORE mount to avoid timeout issues
-                // NOTE: /objects is slow to populate with many objects
-                // We cache ALL directories to prevent them appearing empty
-                const criticalDirs = ['/chats', '/debug', '/invites', '/objects', '/profiles', '/questionnaires', '/types'];
-
-                // Process all critical directories
+                // Original code pre-populated all subdirectories, but this may cause
+                // Windows to create duplicate placeholders. Testing without pre-population.
+                /*
+                const criticalDirs = rootEntries.map(name => `/${name}`);
                 for (const dir of criticalDirs) {
                     try {
                         log(`Pre-populating ${dir}...`);
@@ -426,6 +432,7 @@ class IFSProjFSProvider extends EventEmitter {
                         log(`Could not pre-populate ${dir}: ${e.message}`);
                     }
                 }
+                */
 
                 // NOTE: /invites directory structure is pre-populated, but file CONTENT
                 // is dynamically generated and must always be read fresh from the filesystem

@@ -143,11 +143,7 @@ private:
     mutable std::mutex directoryCacheMutex_;
     mutable std::unordered_map<std::string, DirectoryCache> directoryCache_;
     static constexpr std::chrono::milliseconds CACHE_VALIDITY_MS{5000}; // 5 seconds
-    
-    // Track if root enumeration has been completed to prevent duplicates
-    mutable std::atomic<bool> rootEnumerationComplete_{false};
-    mutable std::atomic<int> rootEnumerationCount_{0};
-    
+
     // Track pending GetFileData commands for ERROR_IO_PENDING completion
     struct PendingFileRequest {
         std::string virtualPath;
