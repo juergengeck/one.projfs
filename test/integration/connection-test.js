@@ -515,6 +515,32 @@ async function runConnectionTest() {
 
         console.log(`✅ All ${expectedDirs.length} directories mounted correctly`);
 
+        // Test 2b: Check for duplicate directories using Windows 'dir' command
+        console.log('\n4️⃣b Checking for duplicate directories using Windows dir command...');
+        try {
+            const { execSync } = await import('child_process');
+            const dirOutput = execSync(`dir "${MOUNT_POINT}" /AD /B`, { encoding: 'utf8', shell: 'cmd.exe' });
+            const windowsDirs = dirOutput.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            console.log(`   Windows dir command found: ${windowsDirs.join(', ')}`);
+
+            const dirCounts = {};
+            windowsDirs.forEach(dir => { dirCounts[dir] = (dirCounts[dir] || 0) + 1; });
+            const duplicates = Object.entries(dirCounts).filter(([_, count]) => count > 1).map(([name, count]) => `${name} (${count}x)`);
+
+            if (duplicates.length > 0) {
+                console.warn(`DUPLICATE DIRECTORIES DETECTED via Windows dir command:\n   Duplicates: ${duplicates.join(', ')}\n   All directories: ${windowsDirs.join(', ')}`);
+            } else {
+                
+                console.log(`✅ No duplicate directories found via Windows dir command`);
+                console.log(`   Verified unique count: ${windowsDirs.length}`);
+
+            }
+
+        } catch (error) {
+            if (error.message.includes('DUPLICATE DIRECTORIES')) throw error;
+            console.warn(`   Warning: Could not run Windows dir command: ${error.message}`);
+        }
+
         // Test 3: Check invites directory exists
         console.log('\n5️⃣ Checking invites directory...');
         if (!fs.existsSync(INVITES_PATH)) {
@@ -685,6 +711,96 @@ async function runConnectionTest() {
         console.log(`✅ Profiles directory contains ${profileEntries.length} entry/entries`);
         console.log(`   Profile entries: ${profileEntries.join(', ')}`);
 
+        // Verify objects directory is correctly populated
+        console.log('\n1️⃣2️⃣ Verifying objects directory structure...');
+        const objectsDir = path.join(MOUNT_POINT, 'objects');
+        if (!fs.existsSync(objectsDir)) {
+            throw new Error(`Objects directory not found: ${objectsDir}`);
+        }
+
+        const objectHashes = fs.readdirSync(objectsDir).filter(item => {
+            const itemPath = path.join(objectsDir, item);
+            return fs.statSync(itemPath).isDirectory() && /^[0-9A-Fa-f]{64}$/.test(item);
+        });
+        console.log(`   Found ${objectHashes.length} object hash(es) in /objects`);
+
+        if (objectHashes.length === 0) {
+            throw new Error('No object hashes found in /objects!\n' +
+                           '   Expected at least some object hashes after initialization.\n' +
+                           '   This suggests ObjectsFileSystem is not correctly populating the directory.');
+        }
+
+        // Verify a sample object hash directory has expected files
+        const sampleObjectHash = objectHashes[0];
+        const sampleObjectDir = path.join(objectsDir, sampleObjectHash);
+        const objectFiles = fs.readdirSync(sampleObjectDir);
+        console.log(`   Sample object ${sampleObjectHash.substring(0, 16)}... contains: ${objectFiles.join(', ')}`);
+
+        const expectedObjectFiles = ['raw.txt', 'type.txt', 'pretty.html', 'json.txt'];
+        const hasRequiredFiles = objectFiles.includes('raw.txt') && objectFiles.includes('type.txt');
+        if (!hasRequiredFiles) {
+            throw new Error(`Object hash directory missing required files!\n` +
+                           `   Expected at least: raw.txt, type.txt\n` +
+                           `   Found: ${objectFiles.join(', ')}`);
+        }
+
+        console.log(`✅ Objects directory correctly populated with ${objectHashes.length} hash(es)`);
+        console.log(`   Sample object has required files: ${objectFiles.filter(f => expectedObjectFiles.includes(f)).join(', ')}`);
+
+        // Verify types directory is correctly populated
+        console.log('\n1️⃣3️⃣ Verifying types directory structure...');
+        const typesDir = path.join(MOUNT_POINT, 'types');
+        if (!fs.existsSync(typesDir)) {
+            throw new Error(`Types directory not found: ${typesDir}`);
+        }
+
+        const typeNames = fs.readdirSync(typesDir).filter(item => {
+            const itemPath = path.join(typesDir, item);
+            return fs.statSync(itemPath).isDirectory();
+        });
+        console.log(`   Found ${typeNames.length} type(s) in /types`);
+        console.log(`   Types: ${typeNames.join(', ')}`);
+
+        if (typeNames.length === 0) {
+            throw new Error('No types found in /types!\n' +
+                           '   Expected at least some types after initialization.\n' +
+                           '   This suggests TypesFileSystem is not correctly populating the directory.');
+        }
+
+        // Verify a sample type directory has hash subdirectories
+        const sampleTypeName = typeNames[0];
+        const sampleTypeDir = path.join(typesDir, sampleTypeName);
+        const typeHashes = fs.readdirSync(sampleTypeDir).filter(item => {
+            const itemPath = path.join(sampleTypeDir, item);
+            return fs.statSync(itemPath).isDirectory() && /^[0-9A-Fa-f]{64}$/.test(item);
+        });
+        console.log(`   Type '${sampleTypeName}' contains ${typeHashes.length} hash(es)`);
+
+        if (typeHashes.length === 0) {
+            throw new Error(`Type directory '${sampleTypeName}' has no hash subdirectories!\n` +
+                           '   Expected at least one hash subdirectory.\n' +
+                           '   This suggests TypesFileSystem is not correctly populating subdirectories.');
+        }
+
+        // Verify a sample hash directory within a type has expected files
+        const sampleTypeHash = typeHashes[0];
+        const sampleTypeHashDir = path.join(sampleTypeDir, sampleTypeHash);
+        const typeHashFiles = fs.readdirSync(sampleTypeHashDir);
+        console.log(`   Hash ${sampleTypeHash.substring(0, 16)}... in '${sampleTypeName}' contains: ${typeHashFiles.join(', ')}`);
+
+        const expectedTypeFiles = ['raw.txt', 'type.txt', 'pretty.html', 'json.txt'];
+        const hasRequiredTypeFiles = typeHashFiles.includes('type.txt') &&
+                                     (typeHashFiles.includes('raw.txt') || typeHashFiles.includes('raw'));
+        if (!hasRequiredTypeFiles) {
+            throw new Error(`Type hash directory missing required files!\n` +
+                           `   Expected at least: raw.txt (or raw), type.txt\n` +
+                           `   Found: ${typeHashFiles.join(', ')}`);
+        }
+
+        console.log(`✅ Types directory correctly populated with ${typeNames.length} type(s)`);
+        console.log(`   Sample type '${sampleTypeName}' has ${typeHashes.length} hash(es)`);
+        console.log(`   Sample hash has files: ${typeHashFiles.join(', ')}`);
+
         console.log('\n🎉 Final Results:');
         console.log('   ✅ All 7 directories mounted correctly');
         console.log('   ✅ ProjFS mount working correctly');
@@ -692,6 +808,8 @@ async function runConnectionTest() {
         console.log('   ✅ Connection established successfully');
         console.log('   ✅ Bidirectional contacts created');
         console.log(`   ✅ Profile entries created (${profileEntries.length} found)`);
+        console.log(`   ✅ Objects directory populated (${objectHashes.length} hashes)`);
+        console.log(`   ✅ Types directory populated (${typeNames.length} types)`);
         console.log('   ✅ Integration test PASSED!');
 
         // Interactive mode: wait for user inspection before cleanup

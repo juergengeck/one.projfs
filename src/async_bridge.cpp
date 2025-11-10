@@ -113,18 +113,26 @@ void AsyncBridge::FetchFileInfo(const std::string& path) {
 }
 
 void AsyncBridge::FetchDirectoryListing(const std::string& path) {
+    std::cout << "[AsyncBridge-DEBUG] FetchDirectoryListing ENTRY for path: " << path << std::endl;
+
     if (!readDirectoryCallback_) {
+        std::cout << "[AsyncBridge-DEBUG] ERROR: No readDirectoryCallback registered!" << std::endl;
         EmitDebugMessage("[AsyncBridge] FetchDirectoryListing called but no callback registered for path: " + path);
         return;
     }
-    
+
+    std::cout << "[AsyncBridge-DEBUG] readDirectoryCallback is registered, calling NonBlockingCall" << std::endl;
     EmitDebugMessage("[AsyncBridge] FetchDirectoryListing called for path: " + path);
-    
+
     readDirectoryCallback_.NonBlockingCall([this, path](Napi::Env env, Napi::Function jsCallback) {
+        std::cout << "[AsyncBridge-DEBUG] Inside NonBlockingCall lambda for path: " << path << std::endl;
         EmitDebugMessage("[AsyncBridge] Calling JavaScript readDirectory for path: " + path);
+        std::cout << "[AsyncBridge-DEBUG] About to call jsCallback.Call" << std::endl;
         auto result = jsCallback.Call({Napi::String::New(env, path)});
-        
+        std::cout << "[AsyncBridge-DEBUG] jsCallback.Call returned" << std::endl;
+
         if (result.IsPromise()) {
+            std::cout << "[AsyncBridge-DEBUG] Result is a Promise" << std::endl;
             auto promise = result.As<Napi::Promise>();
             auto thenFunc = promise.Get("then").As<Napi::Function>();
             

@@ -100,7 +100,8 @@ std::vector<std::string> SyncStorage::ListObjects() {
     std::vector<std::string> objects;
     try {
         for (const auto& entry : std::filesystem::directory_iterator(objectsPath_)) {
-            if (entry.is_regular_file()) {
+            // Include both files AND directories (hash directories)
+            if (entry.is_regular_file() || entry.is_directory()) {
                 objects.push_back(entry.path().filename().string());
             }
         }

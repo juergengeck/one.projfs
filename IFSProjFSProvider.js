@@ -162,12 +162,12 @@ class IFSProjFSProvider extends EventEmitter {
 
         const normalizedPath = this.normalizePath(path);
         log(`readFile: "${path}" -> "${normalizedPath}"`);
-        
+
         if (normalizedPath.startsWith('/objects/')) {
             log(`  Skipping /objects path`);
             return null;
         }
-        
+
         try {
             const file = await this.fileSystem.readFile(normalizedPath);
             if (file && file.content) {
@@ -228,23 +228,39 @@ class IFSProjFSProvider extends EventEmitter {
     
     async readDirectory(path) {
         enumerationCount.count++;
-        
+
         const normalizedPath = this.normalizePath(path);
         log(`\nreadDirectory #${enumerationCount.count}: "${path}" -> "${normalizedPath}"`);
+
+        if (normalizedPath === '/objects' || normalizedPath.startsWith('/objects/')) {
+            console.log(`[DEBUG-OBJECTS] readDirectory called for: "${normalizedPath}"`);
+        }
         
         // Let the filesystem provide the root directory listing
         // No hardcoding - get real data
         
         try {
+            if (normalizedPath === '/objects' || normalizedPath.startsWith('/objects/')) {
+                console.log(`[DEBUG-OBJECTS] About to call fileSystem.readDir for: "${normalizedPath}"`);
+            }
+
             const dir = await this.fileSystem.readDir(normalizedPath);
+
+            if (normalizedPath === '/objects' || normalizedPath.startsWith('/objects/')) {
+                console.log(`[DEBUG-OBJECTS] fileSystem.readDir returned: ${dir?.children?.length || 0} children`);
+                if (dir?.children) {
+                    console.log(`[DEBUG-OBJECTS] Children: ${JSON.stringify(dir.children.slice(0, 5))}`);
+                }
+            }
+
             if (!dir?.children || !Array.isArray(dir.children)) {
                 log('  No children');
                 return [];
             }
-            
+
             log(`  Raw children: ${dir.children.length} items`);
             log(`  First 3: ${JSON.stringify(dir.children.slice(0, 3))}`);
-            
+
             const entries = [];
             const seen = new Set();
             

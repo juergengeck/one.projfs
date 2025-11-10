@@ -54,6 +54,24 @@ bool ProjFSProvider::Start(const std::string& virtualRoot) {
     std::wstring projfsDir = virtualRoot_ + L"\\.projfs";
     RemoveDirectoryW(projfsDir.c_str());
 
+    // CRITICAL: Remove ALL hydrated/tombstone directories and files
+    // ProjFS creates physical directories/files when accessed, and these remain after unmount
+    // If we don't remove them, Windows will read from disk instead of calling our callbacks!
+    std::cout << "[ProjFS] Removing all hydrated files and directories..." << std::endl;
+    try {
+        std::filesystem::path rootPath(virtualRoot_);
+        if (std::filesystem::exists(rootPath)) {
+            // Remove all contents but keep the root directory
+            for (const auto& entry : std::filesystem::directory_iterator(rootPath)) {
+                std::filesystem::remove_all(entry.path());
+                std::cout << "[ProjFS]   Removed: " << entry.path().filename().string() << std::endl;
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cout << "[ProjFS] Warning: Failed to remove some hydrated content: " << e.what() << std::endl;
+        // Continue anyway - ProjFS might still work
+    }
+
     // Mark the directory as the virtualization root with our NEW instance ID
     HRESULT hr = PrjMarkDirectoryAsPlaceholder(
         virtualRoot_.c_str(),
@@ -582,13 +600,17 @@ HRESULT CALLBACK ProjFSProvider::GetDirectoryEnumerationCallback(
     const GUID* enumerationId,
     PCWSTR searchExpression,
     PRJ_DIR_ENTRY_BUFFER_HANDLE dirEntryBufferHandle) {
-    
+
     auto* provider = static_cast<ProjFSProvider*>(callbackData->InstanceContext);
     provider->stats_.directoryEnumerations++;
     provider->stats_.enumerationCallbacks++;
 
+    std::cout << "[GetDirEnum-ENTRY] =========== CALLED ===========" << std::endl;
+
     // Convert Windows path to Unix-style path
     std::string relativePath = provider->ToUtf8(callbackData->FilePathName);
+
+    std::cout << "[GetDirEnum-ENTRY] relativePath: '" << relativePath << "'" << std::endl;
     
     // Replace backslashes with forward slashes
     std::replace(relativePath.begin(), relativePath.end(), '\\', '/');
@@ -716,41 +738,16 @@ HRESULT CALLBACK ProjFSProvider::GetDirectoryEnumerationCallback(
             }
         }
         
-        // If not in cache, use storage ONLY for /objects paths
-        if (!gotEntries && (virtualPath == "/objects" || virtualPath.compare(0, 9, "/objects/") == 0)) {
-            auto storageEntries = provider->storage_->ListDirectory(virtualPath);
-            // Convert string names to FileInfo structures
-            for (const auto& name : storageEntries) {
-                FileInfo info;
-                info.name = name;
-                info.isDirectory = false;  // Objects are files
-                info.size = 0;  // Will be determined on demand
-                info.isBlobOrClob = true;
-                info.mode = 0;
-                enumState.entries.push_back(info);
-            }
-            gotEntries = true;
+        // REMOVED: Special case for /objects that used SyncStorage
+        // /objects should go through async bridge to JavaScript like all other paths
+        // since ONE.core objects are not stored in instancePath/objects/
 
-            // Debug: log what we got from storage
-            if (provider->asyncBridge_) {
-                std::stringstream msg;
-                msg << "[ProjFS] Got " << enumState.entries.size() << " entries for path: " << virtualPath;
-                provider->asyncBridge_->EmitDebugMessage(msg.str());
-                for (const auto& e : enumState.entries) {
-                    msg.str("");
-                    msg << "[ProjFS]   - " << e.name;
-                    provider->asyncBridge_->EmitDebugMessage(msg.str());
-                }
-            }
-        }
-        
-        // Get root directory from cache/filesystem like any other directory
-        // No hardcoding - but we need to handle the initial case
-        
-        // For all paths including root, request async fetch if not in cache
+        // For all paths (including /objects and /types), request async fetch if not in cache
         if (!gotEntries && provider->asyncBridge_) {
+            std::cout << "[ProjFS-DEBUG] About to call FetchDirectoryListing for: " << virtualPath << std::endl;
             // Request the directory listing first
             provider->asyncBridge_->FetchDirectoryListing(virtualPath);
+            std::cout << "[ProjFS-DEBUG] FetchDirectoryListing returned for: " << virtualPath << std::endl;
             
             // Wait for the async operation to complete with timeout
             auto timeout = std::chrono::milliseconds(5000); // 5 second timeout
@@ -793,11 +790,26 @@ HRESULT CALLBACK ProjFSProvider::GetDirectoryEnumerationCallback(
         
         // Re-acquire lock before modifying enumeration state
         lock.lock();
-        
+
+        // CRITICAL FIX: Cache the directory listing we just fetched
+        // This allows GetPlaceholderInfo to find these entries later when Windows tries to stat them
+        if (gotEntries && cache && !enumState.entries.empty()) {
+            DirectoryListing listing;
+            listing.entries = enumState.entries;
+            cache->SetDirectoryListing(virtualPath, listing);
+
+            if (provider->asyncBridge_) {
+                std::stringstream msg;
+                msg << "[ProjFS] CACHED directory listing for " << virtualPath
+                    << " with " << enumState.entries.size() << " entries";
+                provider->asyncBridge_->EmitDebugMessage(msg.str());
+            }
+        }
+
         // Only mark as complete if we're not loading entries
         enumState.isLoading = false;
         enumState.isComplete = true;
-        
+
         // Notify any waiting threads that loading is complete
         provider->enumerationCv_.notify_all();
     }
